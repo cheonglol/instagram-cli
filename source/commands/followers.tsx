@@ -157,6 +157,20 @@ export default function Followers({args, options}: Properties) {
 							for (const item of suspiciousUsers.slice(0, 20)) {
 								output += `@${item.user.username} (Score: ${item.suspicionScore})\n`;
 								output += `  Full name: ${item.user.fullName}\n`;
+
+								// Show profile quality if available
+								if (item.profileQuality) {
+									const quality = [];
+									if (!item.profileQuality.hasProfilePic)
+										quality.push('No pic');
+									if (!item.profileQuality.hasBio) quality.push('No bio');
+									if (!item.profileQuality.hasPosts) quality.push('No posts');
+
+									if (quality.length > 0) {
+										output += `  Profile: ${quality.join(', ')}\n`;
+									}
+								}
+
 								for (const reason of item.reasons) {
 									output += `  • ${reason}\n`;
 								}
@@ -211,6 +225,7 @@ export default function Followers({args, options}: Properties) {
 									daysSinceLastPost: a.activity.daysSinceLastPost,
 									isInactive: a.activity.isInactive,
 								},
+								profileQuality: a.profileQuality,
 								suspicionScore: a.suspicionScore,
 								reasons: a.reasons,
 							})),

@@ -710,6 +710,20 @@ class MockClient extends EventEmitter {
 				suspicionScore += 20;
 			}
 
+			const hasProfilePic = Boolean(user.profilePicUrl);
+			const hasBio = i % 5 !== 0; // Some accounts have no bio
+			const mediaCount = Math.floor(Math.random() * 500) + 10;
+
+			if (!hasProfilePic) {
+				reasons.push('No profile picture');
+				suspicionScore += 5;
+			}
+
+			if (!hasBio) {
+				reasons.push('Empty bio');
+				suspicionScore += 5;
+			}
+
 			analyses.push({
 				user: {
 					pk: Number(user.pk.replace('user', '')) + 1000 + i * 10,
@@ -720,8 +734,8 @@ class MockClient extends EventEmitter {
 					isPrivate: false,
 					followerCount: Math.floor(Math.random() * 5000) + 100,
 					followingCount: Math.floor(Math.random() * 1000) + 50,
-					mediaCount: Math.floor(Math.random() * 500) + 10,
-					biography: `Mock bio for ${user.username}`,
+					mediaCount,
+					biography: hasBio ? `Mock bio for ${user.username}` : '',
 				},
 				relationship: {
 					followsYou,
@@ -734,6 +748,11 @@ class MockClient extends EventEmitter {
 						: new Date(),
 					daysSinceLastPost,
 					isInactive,
+				},
+				profileQuality: {
+					hasProfilePic,
+					hasBio,
+					hasPosts: mediaCount > 0,
 				},
 				suspicionScore,
 				reasons,

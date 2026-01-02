@@ -1331,6 +1331,39 @@ export class InstagramClient extends EventEmitter {
 					};
 				}
 
+				// Analyze profile quality for additional signals
+				const profileQuality = {
+					hasProfilePic: Boolean(user.profilePicUrl),
+					hasBio: Boolean(
+						detailedUser.biography && detailedUser.biography.length > 0,
+					),
+					hasPosts: detailedUser.mediaCount > 0,
+				};
+
+				// Check for low-quality profile indicators
+				if (!profileQuality.hasProfilePic) {
+					reasons.push('No profile picture');
+					suspicionScore += 5;
+				}
+
+				if (!profileQuality.hasBio) {
+					reasons.push('Empty bio');
+					suspicionScore += 5;
+				}
+
+				if (!profileQuality.hasPosts) {
+					reasons.push('No posts on account');
+					suspicionScore += 15;
+				}
+
+				// Check for potential bot patterns - very low posts but many follows
+				if (detailedUser.mediaCount < 3 && detailedUser.followingCount > 500) {
+					reasons.push(
+						`Bot-like pattern: ${detailedUser.mediaCount} posts, ${detailedUser.followingCount} following`,
+					);
+					suspicionScore += 15;
+				}
+
 				analyses.push({
 					user: detailedUser,
 					relationship: {
@@ -1343,6 +1376,7 @@ export class InstagramClient extends EventEmitter {
 						daysSinceLastPost,
 						isInactive,
 					},
+					profileQuality,
 					suspicionScore,
 					reasons,
 				});

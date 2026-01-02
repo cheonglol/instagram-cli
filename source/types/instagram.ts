@@ -235,6 +235,12 @@ export type FollowerAnalysis = {
 		daysSinceLastPost?: number;
 		isInactive: boolean;
 	};
+	profileQuality?: {
+		hasProfilePic: boolean;
+		hasBio: boolean;
+		hasPosts: boolean;
+		accountAge?: number; // Days since account creation if available
+	};
 	suspicionScore: number;
 	reasons: string[];
 };
