@@ -1347,7 +1347,9 @@ export class InstagramClient extends EventEmitter {
 					reasons,
 				});
 
-				// Add delay to avoid rate limiting
+				// Add delay to avoid Instagram API rate limiting
+				// Instagram is very strict with follower/following API calls
+				// and will temporarily block rapid sequential requests
 				// eslint-disable-next-line no-await-in-loop
 				await new Promise(resolve => {
 					setTimeout(resolve, 1000);

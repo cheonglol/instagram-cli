@@ -227,7 +227,6 @@ export default function Followers({args, options}: Properties) {
 
 						break;
 					}
-					// No default
 				}
 			} catch (error_) {
 				setError(

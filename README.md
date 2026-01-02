@@ -98,10 +98,40 @@ instagram-cli feed                             # view posts from people you foll
 instagram-cli stories                          # view stories from people you follow (BETA)
 instagram-cli notify                           # view notifications (inbox, followers, mentions)
 
+# Follower management
+instagram-cli followers stats                  # show follower/following counts and statistics
+instagram-cli followers analyze                # analyze following for fake friends/inactive users
+instagram-cli followers analyze -m 50          # analyze up to 50 users (default: 100)
+instagram-cli followers export -o out.json     # export analysis results to JSON file
+
 # Modify configuration
 instagram-cli config                           # lists all config
 instagram-cli config <key> <value>             # set config key to value
 instagram-cli config edit                      # open config file in editor
+```
+
+### Follower Analytics
+
+The `followers` command helps you manage your following list by identifying:
+
+- **Non-mutual follows**: Users who don't follow you back
+- **Inactive users**: Users who haven't posted in a specified number of days (default: 90)
+- **Suspicious accounts**: Users with unusual follower/following ratios
+- **No interactions**: Users you've never messaged with
+
+Each suspicious account receives a score based on these factors, making it easy to identify accounts you may want to unfollow.
+
+**Example workflow:**
+
+```bash
+# Check your follower statistics
+instagram-cli followers stats
+
+# Analyze your following list
+instagram-cli followers analyze
+
+# Export detailed results to review later
+instagram-cli followers export -o fake-friends.json
 ```
 
 > [!TIP]
