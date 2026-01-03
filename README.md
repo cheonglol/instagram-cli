@@ -127,12 +127,14 @@ Each suspicious account receives a score based on these factors, making it easy 
 
 **Stats Command:**
 Shows follower/following statistics including:
+
 - Total counts and difference
 - Mutual follows (comma-separated list)
 - Non-mutual follows (who you follow but they don't follow back)
 - Followers you don't follow back
 
 **Analyze Options:**
+
 - `--inactive-only` - Show only accounts that haven't posted recently
 - `--sort-by inactive` - Sort by days since last post (also: 'posts', 'score')
 - `--inactive-days 180` - Change inactivity threshold (default: 90 days)

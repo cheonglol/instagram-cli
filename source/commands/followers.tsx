@@ -4,18 +4,20 @@ import {Alert, Spinner} from '@inkjs/ui';
 import zod from 'zod';
 import {argument, option} from 'pastel';
 import {useInstagramClient} from '../ui/hooks/use-instagram-client.js';
-import type {FollowerAnalysis} from '../types/instagram.js';
+import type {FollowerAnalysis, FollowerUser} from '../types/instagram.js';
 import AltScreen from '../ui/components/full-screen.js';
+import {StatsDisplay} from '../ui/components/stats-display.js';
+import {UnfollowInteractive} from '../ui/components/unfollow-interactive.js';
 
 export const args = zod.tuple([
 	zod
-		.enum(['stats', 'analyze', 'export'])
+		.enum(['stats', 'analyze', 'export', 'unfollow'])
 		.optional()
 		.describe(
 			argument({
 				name: 'action',
 				description:
-					'Action to perform: stats (show counts), analyze (find fake friends), export (save to JSON)',
+					'Action to perform: stats (show counts), analyze (find fake friends), export (save to JSON), unfollow (interactive unfollow)',
 			}),
 		),
 ]);
@@ -88,6 +90,36 @@ export const options = zod.object({
 					'Sort results by: score (suspicion), inactive (days since post), posts (post count)',
 			}),
 		),
+	groupBy: zod
+		.enum(['none', 'verified', 'follower-count', 'mutual'])
+		.optional()
+		.default('none')
+		.describe(
+			option({
+				description:
+					'Group results by: none, verified (verified status), follower-count (popularity tiers), mutual (relationship type)',
+			}),
+		),
+	interactive: zod
+		.boolean()
+		.optional()
+		.default(false)
+		.describe(
+			option({
+				description:
+					'Enable interactive mode with checkboxes for selection (for unfollow)',
+				alias: 'i',
+			}),
+		),
+	confirmUnfollow: zod
+		.boolean()
+		.optional()
+		.default(true)
+		.describe(
+			option({
+				description: 'Require confirmation before unfollowing (default: true)',
+			}),
+		),
 });
 
 type Properties = {
@@ -108,6 +140,25 @@ export default function Followers({args, options}: Properties) {
 	const [analysis, setAnalysis] = React.useState<
 		FollowerAnalysis[] | undefined
 	>(undefined);
+
+	// For stats display
+	const [statsData, setStatsData] = React.useState<
+		| {
+				followers: FollowerUser[];
+				following: FollowerUser[];
+				mutualFollows: FollowerUser[];
+				notFollowingBack: FollowerUser[];
+				notFollowedBack: FollowerUser[];
+				currentUser: any;
+		  }
+		| undefined
+	>(undefined);
+
+	// For unfollow interactive mode
+	const [showUnfollowUI, setShowUnfollowUI] = React.useState(false);
+	const [unfollowCandidates, setUnfollowCandidates] = React.useState<
+		FollowerUser[]
+	>([]);
 
 	React.useEffect(() => {
 		if (!client || isLoading) {
@@ -140,23 +191,40 @@ export default function Followers({args, options}: Properties) {
 							f => !followingPks.has(f.pk),
 						);
 
-						// Calculate difference
-						const followerDifference = followers.length - following.length;
-						const diffSign = followerDifference >= 0 ? '+' : '';
+						// Store stats data for rendering
+						setStatsData({
+							followers,
+							following,
+							mutualFollows,
+							notFollowingBack,
+							notFollowedBack,
+							currentUser,
+						});
 
-						setResult(
-							`📊 Follower Statistics for @${currentUser?.username ?? 'you'}\n\n` +
-								`👥 Followers: ${followers.length}\n` +
-								`➡️  Following: ${following.length}\n` +
-								`📊 Difference: ${diffSign}${followerDifference} (followers - following)\n` +
-								`🤝 Mutual follows: ${mutualFollows.length}\n` +
-								`❌ You follow but they don't: ${notFollowingBack.length}\n` +
-								`👻 They follow but you don't: ${notFollowedBack.length}\n` +
-								`📈 Follower/Following ratio: ${(followers.length / Math.max(following.length, 1)).toFixed(2)}\n\n` +
-								`🤝 Mutual follows: ${mutualFollows.map(u => u.username).join(', ')}\n\n` +
-								`❌ Not following back: ${notFollowingBack.map(u => u.username).join(', ')}\n\n` +
-								`👻 You don't follow back: ${notFollowedBack.map(u => u.username).join(', ')}`,
-						);
+						break;
+					}
+
+					case 'unfollow': {
+						setResult('📋 Loading accounts for unfollow...');
+
+						const [followers, following] = await Promise.all([
+							client.getFollowersList(),
+							client.getFollowingList(),
+						]);
+
+						const followerPks = new Set(followers.map(f => f.pk));
+
+						// By default, show accounts you follow but they don't follow back
+						const candidates = following.filter(f => !followerPks.has(f.pk));
+
+						if (candidates.length === 0) {
+							setResult('✅ No non-mutual follows found!');
+							break;
+						}
+
+						setUnfollowCandidates(candidates);
+						setShowUnfollowUI(true);
+						setResult(undefined);
 
 						break;
 					}
@@ -384,6 +452,64 @@ export default function Followers({args, options}: Properties) {
 
 	if (error) {
 		return <Alert variant="error">{error}</Alert>;
+	}
+
+	// Show unfollow interactive UI
+	if (showUnfollowUI && unfollowCandidates.length > 0) {
+		return (
+			<AltScreen>
+				<UnfollowInteractive
+					users={unfollowCandidates}
+					title={`Select accounts to unfollow (${unfollowCandidates.length} non-mutual follows)`}
+					onConfirm={async selectedUsers => {
+						setShowUnfollowUI(false);
+						setResult('⏳ Unfollowing selected accounts...');
+
+						let successCount = 0;
+						let errorCount = 0;
+
+						for (const user of selectedUsers) {
+							try {
+								if (client) {
+									await client.unfollowUser(user.pk);
+									successCount++;
+								}
+							} catch (error_) {
+								errorCount++;
+								console.error(`Failed to unfollow ${user.username}:`, error_);
+							}
+						}
+
+						setResult(
+							`✅ Unfollow complete!\n\n` +
+								`Successfully unfollowed: ${successCount}\n` +
+								`Failed: ${errorCount}`,
+						);
+					}}
+					onCancel={() => {
+						setShowUnfollowUI(false);
+						setResult('❌ Unfollow cancelled');
+					}}
+				/>
+			</AltScreen>
+		);
+	}
+
+	// Show stats display
+	if (action === 'stats' && statsData) {
+		return (
+			<AltScreen>
+				<StatsDisplay
+					followers={statsData.followers}
+					following={statsData.following}
+					mutualFollows={statsData.mutualFollows}
+					notFollowingBack={statsData.notFollowingBack}
+					notFollowedBack={statsData.notFollowedBack}
+					username={statsData.currentUser?.username ?? 'you'}
+					groupBy={options.groupBy}
+				/>
+			</AltScreen>
+		);
 	}
 
 	if (!result) {
