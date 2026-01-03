@@ -3,13 +3,13 @@ import {Box, Text} from 'ink';
 import type {FollowerUser} from '../../types/instagram.js';
 
 type StatsDisplayProps = {
-	followers: FollowerUser[];
-	following: FollowerUser[];
-	mutualFollows: FollowerUser[];
-	notFollowingBack: FollowerUser[];
-	notFollowedBack: FollowerUser[];
-	username: string;
-	groupBy?: 'none' | 'verified' | 'follower-count' | 'mutual';
+	readonly followers: FollowerUser[];
+	readonly following: FollowerUser[];
+	readonly mutualFollows: FollowerUser[];
+	readonly notFollowingBack: FollowerUser[];
+	readonly notFollowedBack: FollowerUser[];
+	readonly username: string;
+	readonly groupBy?: 'none' | 'verified' | 'follower-count' | 'mutual';
 };
 
 export function StatsDisplay({
@@ -46,7 +46,9 @@ export function StatsDisplay({
 		);
 	};
 
-	const groupUsers = (users: FollowerUser[]) => {
+	const groupUsers = (
+		users: FollowerUser[],
+	): Record<string, FollowerUser[]> => {
 		if (groupBy === 'verified') {
 			const verified = users.filter(u => u.isVerified);
 			const unverified = users.filter(u => !u.isVerified);
@@ -81,11 +83,11 @@ export function StatsDisplay({
 					🤝 <Text bold>Mutual follows:</Text> {mutualFollows.length}
 				</Text>
 				<Text>
-					❌ <Text bold>You follow but they don't:</Text>{' '}
+					❌ <Text bold>You follow but they don&apos;t:</Text>{' '}
 					{notFollowingBack.length}
 				</Text>
 				<Text>
-					👻 <Text bold>They follow but you don't:</Text>{' '}
+					👻 <Text bold>They follow but you don&apos;t:</Text>{' '}
 					{notFollowedBack.length}
 				</Text>
 				<Text>
@@ -135,7 +137,7 @@ export function StatsDisplay({
 			{notFollowedBack.length > 0 && (
 				<Box marginTop={1} flexDirection="column">
 					<Text bold color="yellow">
-						👻 You Don't Follow Back ({notFollowedBack.length})
+						👻 You Don&apos;t Follow Back ({notFollowedBack.length})
 					</Text>
 					{Object.entries(groupUsers(notFollowedBack)).map(([group, users]) => (
 						<Box key={group} flexDirection="column" marginTop={1}>
@@ -152,7 +154,8 @@ export function StatsDisplay({
 
 			<Box marginTop={1}>
 				<Text dimColor>
-					💡 Tip: Use 'instagram-cli followers unfollow' for interactive cleanup
+					💡 Tip: Use &apos;instagram-cli followers unfollow&apos; for
+					interactive cleanup
 				</Text>
 			</Box>
 		</Box>

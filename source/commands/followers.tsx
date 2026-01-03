@@ -149,7 +149,7 @@ export default function Followers({args, options}: Properties) {
 				mutualFollows: FollowerUser[];
 				notFollowingBack: FollowerUser[];
 				notFollowedBack: FollowerUser[];
-				currentUser: any;
+				currentUser: {username?: string};
 		  }
 		| undefined
 	>(undefined);
@@ -198,7 +198,7 @@ export default function Followers({args, options}: Properties) {
 							mutualFollows,
 							notFollowingBack,
 							notFollowedBack,
-							currentUser,
+							currentUser: currentUser ?? {username: undefined},
 						});
 
 						break;
@@ -468,9 +468,12 @@ export default function Followers({args, options}: Properties) {
 						let successCount = 0;
 						let errorCount = 0;
 
+						// Sequential unfollowing with rate limiting
+
 						for (const user of selectedUsers) {
 							try {
 								if (client) {
+									// eslint-disable-next-line no-await-in-loop
 									await client.unfollowUser(user.pk);
 									successCount++;
 								}
@@ -485,10 +488,6 @@ export default function Followers({args, options}: Properties) {
 								`Successfully unfollowed: ${successCount}\n` +
 								`Failed: ${errorCount}`,
 						);
-					}}
-					onCancel={() => {
-						setShowUnfollowUI(false);
-						setResult('❌ Unfollow cancelled');
 					}}
 				/>
 			</AltScreen>

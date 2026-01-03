@@ -99,13 +99,15 @@ instagram-cli stories                          # view stories from people you fo
 instagram-cli notify                           # view notifications (inbox, followers, mentions)
 
 # Follower management
-instagram-cli followers stats                                    # show follower/following counts with username lists
+instagram-cli followers stats                                    # show follower/following counts with visual layout
+instagram-cli followers stats --group-by verified               # group stats by verified status
 instagram-cli followers analyze                                  # analyze following for fake friends/inactive users
 instagram-cli followers analyze -m 50                            # analyze up to 50 users (default: 100)
 instagram-cli followers analyze --inactive-only                  # show only inactive accounts
 instagram-cli followers analyze --sort-by inactive               # sort by days inactive (or 'posts', 'score')
 instagram-cli followers export -o out.json                       # export analysis results to JSON file
 instagram-cli followers export -o inactive.json --inactive-only  # export only inactive accounts
+instagram-cli followers unfollow                                 # interactive unfollow with checkbox selection
 
 # Modify configuration
 instagram-cli config                           # lists all config
@@ -126,31 +128,43 @@ The `followers` command helps you manage your following list by identifying:
 Each suspicious account receives a score based on these factors, making it easy to identify accounts you may want to unfollow.
 
 **Stats Command:**
-Shows follower/following statistics including:
-
+Shows follower/following statistics with visual organization:
 - Total counts and difference
-- Mutual follows (comma-separated list)
-- Non-mutual follows (who you follow but they don't follow back)
-- Followers you don't follow back
+- Grouped displays for mutual follows, non-mutual, and unfollowed users
+- Verified status indicators (✓)
+- Optional grouping by verified status with `--group-by verified`
+
+**Unfollow Command (Interactive):**
+- Interactive checkbox selection for accounts to unfollow
+- Confirmation prompt before unfollowing
+- Shows target list for review
+- Real-time progress feedback
+- Focuses on non-mutual follows by default
 
 **Analyze Options:**
-
 - `--inactive-only` - Show only accounts that haven't posted recently
 - `--sort-by inactive` - Sort by days since last post (also: 'posts', 'score')
 - `--inactive-days 180` - Change inactivity threshold (default: 90 days)
 - `--max-users 50` - Limit analysis to first N users
+- `--group-by verified` - Group results by verified status
 
 **Example workflow:**
 
 ```bash
-# Check your follower statistics with username lists
+# Check your follower statistics with visual layout
 instagram-cli followers stats
+
+# Check stats grouped by verified status
+instagram-cli followers stats --group-by verified
 
 # Find all inactive accounts (no posts in 90+ days)
 instagram-cli followers analyze --inactive-only
 
 # Export only inactive accounts sorted by inactivity
 instagram-cli followers export -o inactive-to-unfollow.json --inactive-only --sort-by inactive
+
+# Interactive unfollow - select accounts with checkboxes
+instagram-cli followers unfollow
 
 # Find accounts with low post activity
 instagram-cli followers analyze --sort-by posts
