@@ -99,10 +99,13 @@ instagram-cli stories                          # view stories from people you fo
 instagram-cli notify                           # view notifications (inbox, followers, mentions)
 
 # Follower management
-instagram-cli followers stats                  # show follower/following counts and statistics
-instagram-cli followers analyze                # analyze following for fake friends/inactive users
-instagram-cli followers analyze -m 50          # analyze up to 50 users (default: 100)
-instagram-cli followers export -o out.json     # export analysis results to JSON file
+instagram-cli followers stats                                    # show follower/following counts with username lists
+instagram-cli followers analyze                                  # analyze following for fake friends/inactive users
+instagram-cli followers analyze -m 50                            # analyze up to 50 users (default: 100)
+instagram-cli followers analyze --inactive-only                  # show only inactive accounts
+instagram-cli followers analyze --sort-by inactive               # sort by days inactive (or 'posts', 'score')
+instagram-cli followers export -o out.json                       # export analysis results to JSON file
+instagram-cli followers export -o inactive.json --inactive-only  # export only inactive accounts
 
 # Modify configuration
 instagram-cli config                           # lists all config
@@ -118,20 +121,40 @@ The `followers` command helps you manage your following list by identifying:
 - **Inactive users**: Users who haven't posted in a specified number of days (default: 90)
 - **Suspicious accounts**: Users with unusual follower/following ratios
 - **No interactions**: Users you've never messaged with
+- **Profile quality issues**: Accounts with no profile pic, empty bio, or no posts
 
 Each suspicious account receives a score based on these factors, making it easy to identify accounts you may want to unfollow.
+
+**Stats Command:**
+Shows follower/following statistics including:
+- Total counts and difference
+- Mutual follows (comma-separated list)
+- Non-mutual follows (who you follow but they don't follow back)
+- Followers you don't follow back
+
+**Analyze Options:**
+- `--inactive-only` - Show only accounts that haven't posted recently
+- `--sort-by inactive` - Sort by days since last post (also: 'posts', 'score')
+- `--inactive-days 180` - Change inactivity threshold (default: 90 days)
+- `--max-users 50` - Limit analysis to first N users
 
 **Example workflow:**
 
 ```bash
-# Check your follower statistics
+# Check your follower statistics with username lists
 instagram-cli followers stats
 
-# Analyze your following list
-instagram-cli followers analyze
+# Find all inactive accounts (no posts in 90+ days)
+instagram-cli followers analyze --inactive-only
 
-# Export detailed results to review later
-instagram-cli followers export -o fake-friends.json
+# Export only inactive accounts sorted by inactivity
+instagram-cli followers export -o inactive-to-unfollow.json --inactive-only --sort-by inactive
+
+# Find accounts with low post activity
+instagram-cli followers analyze --sort-by posts
+
+# Comprehensive analysis
+instagram-cli followers analyze
 ```
 
 > [!TIP]

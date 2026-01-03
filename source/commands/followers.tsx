@@ -68,6 +68,26 @@ export const options = zod.object({
 				description: 'Skip activity checks (faster but less accurate)',
 			}),
 		),
+	inactiveOnly: zod
+		.boolean()
+		.optional()
+		.default(false)
+		.describe(
+			option({
+				description:
+					'Show/export only inactive accounts (no recent posts/stories)',
+			}),
+		),
+	sortBy: zod
+		.enum(['score', 'inactive', 'posts'])
+		.optional()
+		.default('score')
+		.describe(
+			option({
+				description:
+					'Sort results by: score (suspicion), inactive (days since post), posts (post count)',
+			}),
+		),
 });
 
 type Properties = {
@@ -107,24 +127,35 @@ export default function Followers({args, options}: Properties) {
 						const followerPks = new Set(followers.map(f => f.pk));
 						const followingPks = new Set(following.map(f => f.pk));
 
-						const mutualCount = followers.filter(f =>
-							followingPks.has(f.pk),
-						).length;
+						// Get mutual follows (users in both lists)
+						const mutualFollows = followers.filter(f => followingPks.has(f.pk));
+
+						// Get users you follow but they don't follow back
 						const notFollowingBack = following.filter(
 							f => !followerPks.has(f.pk),
-						).length;
+						);
+
+						// Get users who follow you but you don't follow back
 						const notFollowedBack = followers.filter(
 							f => !followingPks.has(f.pk),
-						).length;
+						);
+
+						// Calculate difference
+						const followerDifference = followers.length - following.length;
+						const diffSign = followerDifference >= 0 ? '+' : '';
 
 						setResult(
 							`📊 Follower Statistics for @${currentUser?.username ?? 'you'}\n\n` +
 								`👥 Followers: ${followers.length}\n` +
 								`➡️  Following: ${following.length}\n` +
-								`🤝 Mutual follows: ${mutualCount}\n` +
-								`❌ You follow but they don't: ${notFollowingBack}\n` +
-								`👻 They follow but you don't: ${notFollowedBack}\n` +
-								`📈 Follower/Following ratio: ${(followers.length / Math.max(following.length, 1)).toFixed(2)}`,
+								`📊 Difference: ${diffSign}${followerDifference} (followers - following)\n` +
+								`🤝 Mutual follows: ${mutualFollows.length}\n` +
+								`❌ You follow but they don't: ${notFollowingBack.length}\n` +
+								`👻 They follow but you don't: ${notFollowedBack.length}\n` +
+								`📈 Follower/Following ratio: ${(followers.length / Math.max(following.length, 1)).toFixed(2)}\n\n` +
+								`🤝 Mutual follows: ${mutualFollows.map(u => u.username).join(', ')}\n\n` +
+								`❌ Not following back: ${notFollowingBack.map(u => u.username).join(', ')}\n\n` +
+								`👻 You don't follow back: ${notFollowedBack.map(u => u.username).join(', ')}`,
 						);
 
 						break;
@@ -135,11 +166,36 @@ export default function Followers({args, options}: Properties) {
 							'🔍 Analyzing your following list...\nThis may take a while.',
 						);
 
-						const analysisResult = await client.analyzeFollowing({
+						let analysisResult = await client.analyzeFollowing({
 							inactiveDays: options.inactiveDays,
 							checkActivity: !options.noActivity,
 							maxUsers: options.maxUsers,
 						});
+
+						// Filter to inactive only if requested
+						if (options.inactiveOnly) {
+							analysisResult = analysisResult.filter(
+								a => a.activity.isInactive,
+							);
+						}
+
+						// Sort results based on user preference
+						if (options.sortBy === 'inactive') {
+							analysisResult.sort(
+								(a, b) =>
+									(b.activity.daysSinceLastPost ?? 0) -
+									(a.activity.daysSinceLastPost ?? 0),
+							);
+						} else if (options.sortBy === 'posts') {
+							analysisResult.sort(
+								(a, b) => a.user.mediaCount - b.user.mediaCount,
+							);
+						} else {
+							// Default: sort by suspicion score
+							analysisResult.sort(
+								(a, b) => b.suspicionScore - a.suspicionScore,
+							);
+						}
 
 						setAnalysis(analysisResult);
 
@@ -147,16 +203,42 @@ export default function Followers({args, options}: Properties) {
 							a => a.suspicionScore > 0,
 						);
 
+						const inactiveUsers = analysisResult.filter(
+							a => a.activity.isInactive,
+						);
+
 						let output = `\n🕵️  Analysis Complete!\n\n`;
 						output += `Analyzed ${analysisResult.length} users\n`;
-						output += `Found ${suspiciousUsers.length} potentially fake friends\n\n`;
 
-						if (suspiciousUsers.length > 0) {
-							output += `🚩 Top suspicious accounts:\n\n`;
+						if (options.inactiveOnly) {
+							output += `Found ${inactiveUsers.length} inactive accounts (no posts in ${options.inactiveDays}+ days)\n\n`;
+						} else {
+							output += `Found ${suspiciousUsers.length} potentially fake friends\n`;
+							output += `Found ${inactiveUsers.length} inactive accounts\n\n`;
+						}
 
-							for (const item of suspiciousUsers.slice(0, 20)) {
-								output += `@${item.user.username} (Score: ${item.suspicionScore})\n`;
+						if (
+							(options.inactiveOnly && inactiveUsers.length > 0) ||
+							(!options.inactiveOnly && suspiciousUsers.length > 0)
+						) {
+							const displayUsers = options.inactiveOnly
+								? analysisResult.slice(0, 20)
+								: suspiciousUsers.slice(0, 20);
+
+							output += options.inactiveOnly
+								? `📅 Inactive accounts (sorted by ${options.sortBy}):\n\n`
+								: `🚩 Top suspicious accounts:\n\n`;
+
+							for (const item of displayUsers) {
+								output += `@${item.user.username} (Score: ${item.suspicionScore})`;
+
+								if (item.activity.daysSinceLastPost !== undefined) {
+									output += ` - ${item.activity.daysSinceLastPost} days inactive`;
+								}
+
+								output += '\n';
 								output += `  Full name: ${item.user.fullName}\n`;
+								output += `  Posts: ${item.user.mediaCount}, Followers: ${item.user.followerCount}, Following: ${item.user.followingCount}\n`;
 
 								// Show profile quality if available
 								if (item.profileQuality) {
@@ -198,11 +280,36 @@ export default function Followers({args, options}: Properties) {
 
 						setResult('📦 Exporting analysis...');
 
-						const analysisResult = await client.analyzeFollowing({
+						let analysisResult = await client.analyzeFollowing({
 							inactiveDays: options.inactiveDays,
 							checkActivity: !options.noActivity,
 							maxUsers: options.maxUsers,
 						});
+
+						// Filter to inactive only if requested
+						if (options.inactiveOnly) {
+							analysisResult = analysisResult.filter(
+								a => a.activity.isInactive,
+							);
+						}
+
+						// Sort results based on user preference
+						if (options.sortBy === 'inactive') {
+							analysisResult.sort(
+								(a, b) =>
+									(b.activity.daysSinceLastPost ?? 0) -
+									(a.activity.daysSinceLastPost ?? 0),
+							);
+						} else if (options.sortBy === 'posts') {
+							analysisResult.sort(
+								(a, b) => a.user.mediaCount - b.user.mediaCount,
+							);
+						} else {
+							// Default: sort by suspicion score
+							analysisResult.sort(
+								(a, b) => b.suspicionScore - a.suspicionScore,
+							);
+						}
 
 						const fs = await import('node:fs/promises');
 						const exportData = {
@@ -210,7 +317,13 @@ export default function Followers({args, options}: Properties) {
 							totalAnalyzed: analysisResult.length,
 							suspiciousCount: analysisResult.filter(a => a.suspicionScore > 0)
 								.length,
+							inactiveCount: analysisResult.filter(a => a.activity.isInactive)
+								.length,
 							inactiveDaysThreshold: options.inactiveDays,
+							filterApplied: options.inactiveOnly
+								? 'inactive-only'
+								: 'all-users',
+							sortedBy: options.sortBy,
 							users: analysisResult.map(a => ({
 								username: a.user.username,
 								fullName: a.user.fullName,
@@ -236,8 +349,12 @@ export default function Followers({args, options}: Properties) {
 							JSON.stringify(exportData, null, 2),
 						);
 
+						const filterMsg = options.inactiveOnly
+							? ` (${exportData.inactiveCount} inactive only)`
+							: '';
+
 						setResult(
-							`✅ Export complete!\n\nSaved ${analysisResult.length} user analyses to: ${options.output}`,
+							`✅ Export complete!\n\nSaved ${analysisResult.length} user analyses${filterMsg} to: ${options.output}`,
 						);
 
 						break;
