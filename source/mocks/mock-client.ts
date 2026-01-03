@@ -515,6 +515,253 @@ class MockClient extends EventEmitter {
 		logger.info(`Mock: Switched to user ${username}`);
 	}
 
+	async getFollowersList(_userId?: number | string): Promise<
+		Array<{
+			pk: number;
+			username: string;
+			fullName: string;
+			profilePicUrl: string;
+			isVerified: boolean;
+			isPrivate: boolean;
+		}>
+	> {
+		await new Promise(resolve => {
+			setTimeout(resolve, 1000);
+		});
+		logger.info('Mock: Fetching followers list');
+
+		// Return mock followers
+		return mockUsers.slice(0, 50).map((user, index) => ({
+			pk: Number(user.pk.replace('user', '')) + 1000,
+			username: user.username,
+			fullName: user.fullName,
+			profilePicUrl: user.profilePicUrl ?? '',
+			isVerified: user.isVerified,
+			isPrivate: index % 3 === 0, // Make some private
+		}));
+	}
+
+	async getFollowingList(_userId?: number | string): Promise<
+		Array<{
+			pk: number;
+			username: string;
+			fullName: string;
+			profilePicUrl: string;
+			isVerified: boolean;
+			isPrivate: boolean;
+		}>
+	> {
+		await new Promise(resolve => {
+			setTimeout(resolve, 1000);
+		});
+		logger.info('Mock: Fetching following list');
+
+		// Generate more mock users for following (with some overlap with followers)
+		const followingUsers = [];
+		for (let i = 0; i < 60; i++) {
+			const mockIndex = i % mockUsers.length;
+			const user = mockUsers[mockIndex]!;
+			followingUsers.push({
+				pk: Number(user.pk.replace('user', '')) + 1000 + i * 10,
+				username: `${user.username}_${i}`,
+				fullName: `${user.fullName} ${i}`,
+				profilePicUrl: user.profilePicUrl ?? '',
+				isVerified: user.isVerified,
+				isPrivate: i % 4 === 0, // Make some private
+			});
+		}
+
+		return followingUsers;
+	}
+
+	async getUserInfo(userId: number | string): Promise<{
+		pk: number;
+		username: string;
+		fullName: string;
+		profilePicUrl: string;
+		isVerified: boolean;
+		isPrivate: boolean;
+		followerCount: number;
+		followingCount: number;
+		mediaCount: number;
+		biography?: string;
+	}> {
+		await new Promise(resolve => {
+			setTimeout(resolve, 500);
+		});
+
+		const userIdNum = typeof userId === 'string' ? Number(userId) : userId;
+		const user = mockUsers.find(
+			u => Number(u.pk.replace('user', '')) + 1000 === userIdNum,
+		);
+
+		if (!user) {
+			throw new Error('User not found');
+		}
+
+		// Generate mock stats
+		return {
+			pk: userIdNum,
+			username: user.username,
+			fullName: user.fullName,
+			profilePicUrl: user.profilePicUrl ?? '',
+			isVerified: user.isVerified,
+			isPrivate: false,
+			followerCount: Math.floor(Math.random() * 5000) + 100,
+			followingCount: Math.floor(Math.random() * 1000) + 50,
+			mediaCount: Math.floor(Math.random() * 500) + 10,
+			biography: `Mock bio for ${user.username}`,
+		};
+	}
+
+	async getUserRecentPosts(
+		_userId: number | string,
+		_maxPosts = 12,
+	): Promise<Date[]> {
+		await new Promise(resolve => {
+			setTimeout(resolve, 500);
+		});
+
+		// Generate some random post dates
+		const dates: Date[] = [];
+		const now = Date.now();
+		const dayInMs = 1000 * 60 * 60 * 24;
+
+		// Some users have recent posts
+		if (Math.random() > 0.3) {
+			for (let i = 0; i < Math.floor(Math.random() * 5) + 1; i++) {
+				dates.push(new Date(now - Math.random() * 30 * dayInMs));
+			}
+		}
+
+		return dates.sort((a, b) => b.getTime() - a.getTime());
+	}
+
+	async unfollowUser(userId: number | string): Promise<void> {
+		await new Promise(resolve => {
+			setTimeout(resolve, 500);
+		});
+		logger.info(`Mock: Unfollowed user ${userId}`);
+	}
+
+	async analyzeFollowing(_options?: {
+		inactiveDays?: number;
+		checkActivity?: boolean;
+		maxUsers?: number;
+	}): Promise<
+		Array<{
+			user: {
+				pk: number;
+				username: string;
+				fullName: string;
+				profilePicUrl: string;
+				isVerified: boolean;
+				isPrivate: boolean;
+				followerCount: number;
+				followingCount: number;
+				mediaCount: number;
+				biography?: string;
+			};
+			relationship: {
+				followsYou: boolean;
+				youFollow: boolean;
+				hasThread: boolean;
+			};
+			activity: {
+				lastPostDate?: Date;
+				daysSinceLastPost?: number;
+				isInactive: boolean;
+			};
+			suspicionScore: number;
+			reasons: string[];
+		}>
+	> {
+		await new Promise(resolve => {
+			setTimeout(resolve, 2000);
+		});
+		logger.info('Mock: Analyzing following');
+
+		const analyses = [];
+		for (let i = 0; i < 30; i++) {
+			const mockIndex = i % mockUsers.length;
+			const user = mockUsers[mockIndex]!;
+			const followsYou = i % 3 !== 0;
+			const hasThread = i % 4 === 0;
+			const isInactive = i % 5 === 0;
+			const daysSinceLastPost = isInactive
+				? Math.floor(Math.random() * 200) + 100
+				: Math.floor(Math.random() * 30);
+
+			const reasons: string[] = [];
+			let suspicionScore = 0;
+
+			if (!followsYou) {
+				reasons.push("Doesn't follow you back");
+				suspicionScore += 30;
+			}
+
+			if (isInactive) {
+				reasons.push(`Inactive: no posts in ${daysSinceLastPost} days`);
+				suspicionScore += 40;
+			}
+
+			if (!hasThread) {
+				reasons.push('No conversation history');
+				suspicionScore += 20;
+			}
+
+			const hasProfilePic = Boolean(user.profilePicUrl);
+			const hasBio = i % 5 !== 0; // Some accounts have no bio
+			const mediaCount = Math.floor(Math.random() * 500) + 10;
+
+			if (!hasProfilePic) {
+				reasons.push('No profile picture');
+				suspicionScore += 5;
+			}
+
+			if (!hasBio) {
+				reasons.push('Empty bio');
+				suspicionScore += 5;
+			}
+
+			analyses.push({
+				user: {
+					pk: Number(user.pk.replace('user', '')) + 1000 + i * 10,
+					username: `${user.username}_${i}`,
+					fullName: `${user.fullName} ${i}`,
+					profilePicUrl: user.profilePicUrl ?? '',
+					isVerified: user.isVerified,
+					isPrivate: false,
+					followerCount: Math.floor(Math.random() * 5000) + 100,
+					followingCount: Math.floor(Math.random() * 1000) + 50,
+					mediaCount,
+					biography: hasBio ? `Mock bio for ${user.username}` : '',
+				},
+				relationship: {
+					followsYou,
+					youFollow: true,
+					hasThread,
+				},
+				activity: {
+					lastPostDate: isInactive
+						? new Date(Date.now() - daysSinceLastPost * 24 * 60 * 60 * 1000)
+						: new Date(),
+					daysSinceLastPost,
+					isInactive,
+				},
+				profileQuality: {
+					hasProfilePic,
+					hasBio,
+					hasPosts: mediaCount > 0,
+				},
+				suspicionScore,
+				reasons,
+			});
+		}
+
+		return analyses.sort((a, b) => b.suspicionScore - a.suspicionScore);
+	}
+
 	getUsername(): string | undefined {
 		return 'mock_user';
 	}

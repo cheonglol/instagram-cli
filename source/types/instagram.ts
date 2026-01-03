@@ -206,3 +206,41 @@ export type StoryReel = {
 	user: Story['user'];
 	stories: Story[];
 };
+
+export type FollowerUser = {
+	pk: number;
+	username: string;
+	fullName: string;
+	profilePicUrl: string;
+	isVerified: boolean;
+	isPrivate: boolean;
+};
+
+export type DetailedUser = FollowerUser & {
+	followerCount: number;
+	followingCount: number;
+	mediaCount: number;
+	biography?: string;
+};
+
+export type FollowerAnalysis = {
+	user: DetailedUser;
+	relationship: {
+		followsYou: boolean;
+		youFollow: boolean;
+		hasThread: boolean;
+	};
+	activity: {
+		lastPostDate?: Date;
+		daysSinceLastPost?: number;
+		isInactive: boolean;
+	};
+	profileQuality?: {
+		hasProfilePic: boolean;
+		hasBio: boolean;
+		hasPosts: boolean;
+		accountAge?: number; // Days since account creation if available
+	};
+	suspicionScore: number;
+	reasons: string[];
+};

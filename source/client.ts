@@ -30,6 +30,9 @@ import type {
 	User,
 	Story,
 	StoryReel,
+	FollowerUser,
+	DetailedUser,
+	FollowerAnalysis,
 } from './types/instagram.js';
 import {
 	parseMessageItem,
@@ -1037,6 +1040,366 @@ export class InstagramClient extends EventEmitter {
 				`Failed to mark stories as seen for user ${stories[0]?.user?.pk}`,
 				error,
 			);
+		}
+	}
+
+	/**
+	 * Fetch all followers for a user (defaults to current user).
+	 *
+	 * @param userId - The user ID to fetch followers for (optional, defaults to current user)
+	 * @returns A promise that resolves to an array of FollowerUser objects
+	 */
+	public async getFollowersList(
+		userId?: number | string,
+	): Promise<FollowerUser[]> {
+		try {
+			const targetUserId = userId ?? this.ig.state.cookieUserId;
+			const followersFeed = this.ig.feed.accountFollowers(targetUserId);
+
+			const followers: FollowerUser[] = [];
+			let items = await followersFeed.items();
+
+			while (items.length > 0) {
+				for (const user of items) {
+					followers.push({
+						pk: user.pk,
+						username: user.username,
+						fullName: user.full_name,
+						profilePicUrl: user.profile_pic_url,
+						isVerified: user.is_verified,
+						isPrivate: user.is_private,
+					});
+				}
+
+				if (!followersFeed.isMoreAvailable()) {
+					break;
+				}
+
+				// eslint-disable-next-line no-await-in-loop
+				items = await followersFeed.items();
+			}
+
+			this.logger.info(`Fetched ${followers.length} followers`);
+			return followers;
+		} catch (error) {
+			this.logger.error('Failed to fetch followers list', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Fetch all users the account is following (defaults to current user).
+	 *
+	 * @param userId - The user ID to fetch following for (optional, defaults to current user)
+	 * @returns A promise that resolves to an array of FollowerUser objects
+	 */
+	public async getFollowingList(
+		userId?: number | string,
+	): Promise<FollowerUser[]> {
+		try {
+			const targetUserId = userId ?? this.ig.state.cookieUserId;
+			const followingFeed = this.ig.feed.accountFollowing(targetUserId);
+
+			const following: FollowerUser[] = [];
+			let items = await followingFeed.items();
+
+			while (items.length > 0) {
+				for (const user of items) {
+					following.push({
+						pk: user.pk,
+						username: user.username,
+						fullName: user.full_name,
+						profilePicUrl: user.profile_pic_url,
+						isVerified: user.is_verified,
+						isPrivate: user.is_private,
+					});
+				}
+
+				if (!followingFeed.isMoreAvailable()) {
+					break;
+				}
+
+				// eslint-disable-next-line no-await-in-loop
+				items = await followingFeed.items();
+			}
+
+			this.logger.info(`Fetched ${following.length} following`);
+			return following;
+		} catch (error) {
+			this.logger.error('Failed to fetch following list', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get detailed information about a user including follower/following counts.
+	 *
+	 * @param userId - The user ID to get info for
+	 * @returns A promise that resolves to a DetailedUser object
+	 */
+	public async getUserInfo(userId: number | string): Promise<DetailedUser> {
+		try {
+			const userInfo = await this.ig.user.info(
+				typeof userId === 'string' ? Number(userId) : userId,
+			);
+
+			return {
+				pk: userInfo.pk,
+				username: userInfo.username,
+				fullName: userInfo.full_name,
+				profilePicUrl: userInfo.profile_pic_url,
+				isVerified: userInfo.is_verified,
+				isPrivate: userInfo.is_private,
+				followerCount: userInfo.follower_count,
+				followingCount: userInfo.following_count,
+				mediaCount: userInfo.media_count,
+				biography: userInfo.biography,
+			};
+		} catch (error) {
+			this.logger.error(`Failed to fetch user info for ${userId}`, error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get recent posts from a user to check their activity.
+	 *
+	 * @param userId - The user ID to fetch posts for
+	 * @param maxPosts - Maximum number of posts to fetch (default: 12)
+	 * @returns A promise that resolves to an array of post timestamps
+	 */
+	public async getUserRecentPosts(
+		userId: number | string,
+		maxPosts = 12,
+	): Promise<Date[]> {
+		try {
+			const userFeed = this.ig.feed.user(userId);
+			const items = await userFeed.items();
+
+			const postDates: Date[] = [];
+			for (const item of items.slice(0, maxPosts)) {
+				if (item.taken_at) {
+					postDates.push(new Date(item.taken_at * 1000));
+				}
+			}
+
+			return postDates;
+		} catch (error) {
+			this.logger.error(`Failed to fetch posts for user ${userId}`, error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Unfollow a user.
+	 *
+	 * @param userId - The user ID to unfollow
+	 */
+	public async unfollowUser(userId: number | string): Promise<void> {
+		try {
+			await this.ig.friendship.destroy(userId);
+			this.logger.info(`Unfollowed user ${userId}`);
+		} catch (error) {
+			this.logger.error(`Failed to unfollow user ${userId}`, error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Analyze following list to identify inactive users, non-mutual follows, etc.
+	 *
+	 * @param options - Analysis options
+	 * @returns A promise that resolves to an array of FollowerAnalysis objects
+	 */
+	public async analyzeFollowing(options?: {
+		inactiveDays?: number;
+		checkActivity?: boolean;
+		maxUsers?: number;
+	}): Promise<FollowerAnalysis[]> {
+		const {
+			inactiveDays = 90,
+			checkActivity = true,
+			maxUsers = 100,
+		} = options ?? {};
+
+		try {
+			this.logger.info('Starting following analysis...');
+
+			// Fetch followers and following lists
+			const [followers, following] = await Promise.all([
+				this.getFollowersList(),
+				this.getFollowingList(),
+			]);
+
+			const followerPks = new Set(followers.map(f => f.pk));
+			const threadUserPks = new Set(
+				this.threadsCache.flatMap(t => t.users.map(u => Number(u.pk))),
+			);
+
+			const analyses: FollowerAnalysis[] = [];
+
+			// Analyze each user we follow
+			const usersToAnalyze = following.slice(0, maxUsers);
+			for (const user of usersToAnalyze) {
+				const followsYou = followerPks.has(user.pk);
+				const hasThread = threadUserPks.has(user.pk);
+
+				let lastPostDate: Date | undefined;
+				let daysSinceLastPost: number | undefined;
+				let isInactive = false;
+
+				// Check posting activity if enabled
+				if (checkActivity) {
+					try {
+						// eslint-disable-next-line no-await-in-loop
+						const recentPosts = await this.getUserRecentPosts(user.pk, 1);
+						if (recentPosts.length > 0) {
+							lastPostDate = recentPosts[0];
+							if (lastPostDate) {
+								const daysSince =
+									(Date.now() - lastPostDate.getTime()) / (1000 * 60 * 60 * 24);
+								daysSinceLastPost = Math.floor(daysSince);
+								isInactive = daysSince > inactiveDays;
+							}
+						} else {
+							isInactive = true; // No posts at all
+						}
+					} catch {
+						// If we can't fetch posts (private account), skip activity check
+						this.logger.debug(
+							`Could not check activity for ${user.username} (likely private)`,
+						);
+					}
+				}
+
+				// Calculate suspicion score and reasons
+				const reasons: string[] = [];
+				let suspicionScore = 0;
+
+				if (!followsYou) {
+					reasons.push("Doesn't follow you back");
+					suspicionScore += 30;
+				}
+
+				if (isInactive) {
+					if (daysSinceLastPost === undefined) {
+						reasons.push('Inactive: no posts found');
+					} else {
+						reasons.push(`Inactive: no posts in ${daysSinceLastPost} days`);
+					}
+
+					suspicionScore += 40;
+				}
+
+				if (!hasThread) {
+					reasons.push('No conversation history');
+					suspicionScore += 20;
+				}
+
+				// Fetch detailed info for high suspicion users
+				let detailedUser: DetailedUser;
+				if (suspicionScore > 0) {
+					try {
+						// eslint-disable-next-line no-await-in-loop
+						detailedUser = await this.getUserInfo(user.pk);
+
+						// Check for suspicious follower/following ratio
+						if (
+							detailedUser.followingCount > 1000 &&
+							detailedUser.followerCount < detailedUser.followingCount / 10
+						) {
+							reasons.push(
+								`Suspicious ratio: ${detailedUser.followingCount} following, ${detailedUser.followerCount} followers`,
+							);
+							suspicionScore += 10;
+						}
+					} catch {
+						// If we can't get detailed info, use basic info
+						detailedUser = {
+							...user,
+							followerCount: 0,
+							followingCount: 0,
+							mediaCount: 0,
+						};
+					}
+				} else {
+					detailedUser = {
+						...user,
+						followerCount: 0,
+						followingCount: 0,
+						mediaCount: 0,
+					};
+				}
+
+				// Analyze profile quality for additional signals
+				const profileQuality = {
+					hasProfilePic: Boolean(user.profilePicUrl),
+					hasBio: Boolean(
+						detailedUser.biography && detailedUser.biography.length > 0,
+					),
+					hasPosts: detailedUser.mediaCount > 0,
+				};
+
+				// Check for low-quality profile indicators
+				if (!profileQuality.hasProfilePic) {
+					reasons.push('No profile picture');
+					suspicionScore += 5;
+				}
+
+				if (!profileQuality.hasBio) {
+					reasons.push('Empty bio');
+					suspicionScore += 5;
+				}
+
+				if (!profileQuality.hasPosts) {
+					reasons.push('No posts on account');
+					suspicionScore += 15;
+				}
+
+				// Check for potential bot patterns - very low posts but many follows
+				if (detailedUser.mediaCount < 3 && detailedUser.followingCount > 500) {
+					reasons.push(
+						`Bot-like pattern: ${detailedUser.mediaCount} posts, ${detailedUser.followingCount} following`,
+					);
+					suspicionScore += 15;
+				}
+
+				analyses.push({
+					user: detailedUser,
+					relationship: {
+						followsYou,
+						youFollow: true,
+						hasThread,
+					},
+					activity: {
+						lastPostDate,
+						daysSinceLastPost,
+						isInactive,
+					},
+					profileQuality,
+					suspicionScore,
+					reasons,
+				});
+
+				// Add delay to avoid Instagram API rate limiting
+				// Instagram is very strict with follower/following API calls
+				// and will temporarily block rapid sequential requests
+				// eslint-disable-next-line no-await-in-loop
+				await new Promise(resolve => {
+					setTimeout(resolve, 1000);
+				});
+			}
+
+			// Sort by suspicion score descending
+			analyses.sort((a, b) => b.suspicionScore - a.suspicionScore);
+
+			this.logger.info(
+				`Analysis complete. Found ${analyses.filter(a => a.suspicionScore > 0).length} suspicious accounts`,
+			);
+			return analyses;
+		} catch (error) {
+			this.logger.error('Failed to analyze following', error);
+			throw error;
 		}
 	}
 
